@@ -1,3 +1,27 @@
+/**
+ *
+ * @licstart
+ *
+ * Copyright (C) 2017 Marcio L Teixeira.
+ *
+ *
+ * The JavaScript code in this page is free software: you can
+ * redistribute it and/or modify it under the terms of the GNU Affero
+ * General Public License (GNU AGPL) as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option)
+ * any later version.  The code is distributed WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU AGPL for more details.
+ *
+ * As additional permission under GNU AGPL version 3 section 7, you
+ * may distribute non-source (e.g., minimized or compacted) forms of
+ * that code without the copy of the GNU AGPL normally required by
+ * section 4, provided you include this license notice and a URL
+ * through which recipients can access the Corresponding Source.
+ *
+ * @licend
+ *
+ */
 class GazeInteraction {
     constructor(camera, domElement) {
         this.raycaster   = new THREE.Raycaster();
@@ -15,28 +39,41 @@ class GazeInteraction {
         });
         this.representation = new THREE.Mesh(geometry, cursorMaterial);
 
-        domElement.addEventListener("mousemove", this.onMouseMove.bind(this));
-        domElement.addEventListener("vrdisplaypresentchange", this.vrPresentationChange.bind(this));
+        domElement.addEventListener("mousemove",  this.onMouseMove.bind(this));
+        domElement.addEventListener("touchstart", this.onTouchStart.bind(this));
+        domElement.addEventListener("touchend",   this.onTouchEnd.bind(this));
+        domElement.addEventListener("touchmove",  this.onTouchEvent.bind(this));
     }
 
-    vrPresentationChange() {
-        console.log("IsPresenting:", vrDisplay.isPresenting);
-        if(vrDisplay.isPresenting || vrMode) {
-            this.mouse.set(0,0);
-        }
+    onTouchStart( event ) {
+        this.immediate = true;
+        this.onTouchEvent(event);
     }
 
-    setVRMode(mode) {
-        this.mouse.set(0,0);
-        this.vrMode = mode;
+    onTouchEnd( event ) {
+        this.immediate = false;
+        this.onTouchEvent(event);
+    }
+
+    onTouchEvent( event ) {
+        this.setMouseLocation(event.touches[0].clientX, event.touches[0].clientY);
+        event.preventDefault();
+    }
+
+    set immediate(value) {
+        GazeTargetWithAnimation.growHesitation = value ? 0 : 0.5;
     }
 
     onMouseMove( event ) {
+        this.setMouseLocation(event.clientX, event.clientY);
+    }
+
+    setMouseLocation(x, y) {
         // calculate mouse position in normalized device coordinates
         // (-1 to +1) for both components
-        if(!vrDisplay.isPresenting && !this.vrMode) {
-            this.mouse.x =   (event.clientX / this.domElement.clientWidth  ) * 2 - 1;
-            this.mouse.y = - (event.clientY / this.domElement.clientHeight ) * 2 + 1;
+        if(!vrDisplay.isPresenting) {
+            this.mouse.x =   (x / this.domElement.clientWidth  ) * 2 - 1;
+            this.mouse.y = - (y / this.domElement.clientHeight ) * 2 + 1;
         }
     }
 
@@ -51,6 +88,9 @@ class GazeInteraction {
     }
 
     interact() {
+        if(vrDisplay.isPresenting) {
+            this.mouse.set(0,0);
+        }
         this.raycaster.setFromCamera( this.mouse, this.camera );
 
         // calculate objects intersecting the picking ray
@@ -113,6 +153,10 @@ class GazeInteraction {
     hideCursor() {
         this.representation.visible = false;
     }
+
+    setClickSound(url, audioListener) {
+        GazeTargetWithAnimation.setClickSound(url, audioListener);
+    }
 }
 
 class GazeTarget {
@@ -162,8 +206,8 @@ class GazeTargetWithAnimation extends GazeTargetWithDot {
         super();
         this.callback = callback;
 
-        this.growHesitation = 0.5;
-        this.growTime       = 0.1;
+        GazeTargetWithAnimation.growHesitation = 0.5;
+        GazeTargetWithAnimation.growTime       = 0.1;
         this.bigSize        = 0.020;
 
         this.interactionSurface.userData.onMouseWithin = this.onMouseWithin.bind(this);
@@ -198,12 +242,12 @@ class GazeTargetWithAnimation extends GazeTargetWithDot {
     }
 
     animationStart(t, dt) {
-        this.growing = t + this.growHesitation;
+        this.growing = t + GazeTargetWithAnimation.growHesitation;
         this.animationFunc = this.animationGrowing.bind(this);
     }
 
     animationGrowing(t, dt) {
-        var e = Math.max(0, (t - this.growing)/this.growTime);
+        var e = Math.max(0, (t - this.growing)/GazeTargetWithAnimation.growTime);
         if(e < 1) {
             var s = this.dotSize + e * (this.bigSize - this.dotSize);
             this.dot.scale.set(s,s,s);
@@ -215,6 +259,9 @@ class GazeTargetWithAnimation extends GazeTargetWithDot {
 
     animationLast(t, dt) {
         if(this.callback) {
+            if(GazeTargetWithAnimation.sound) {
+                GazeTargetWithAnimation.sound.play();
+            }
             this.callback();
         }
         this.animationFunc = this.animationWaiting.bind(this);
@@ -222,5 +269,16 @@ class GazeTargetWithAnimation extends GazeTargetWithDot {
 
     animationWaiting(t, dt) {
         // Do nothing until reset is called.
+    }
+
+    static setClickSound(url, audioListener) {
+        if(!GazeTargetWithAnimation.sound) {
+            var sound       = new THREE.Audio(audioListener || new THREE.AudioListener());
+            var audioLoader = new THREE.AudioLoader();
+            audioLoader.load(url, buffer => {
+                sound.setBuffer(buffer);
+                GazeTargetWithAnimation.sound = sound;
+            });
+        }
     }
 }
