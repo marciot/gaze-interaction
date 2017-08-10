@@ -24,7 +24,7 @@
  */
 class GazeViewpoint {
     constructor(camera, vrDisplay) {
-        const sittingEyeHeight = 1.140;
+        const defaultEyeHeight = 1.140;
         
         this.camera      = camera;
         this.vrDisplay   = vrDisplay;
@@ -37,12 +37,12 @@ class GazeViewpoint {
         this.up      = new THREE.Vector3();
         
         this.standingTransform = new THREE.Matrix4();
-        this.standingTransform.makeTranslation(0, sittingEyeHeight, 0);
         this.updateStandingTransform();
-        
-        this.standing = true;
+
+        this.eyeHeight = defaultEyeHeight;
+        this.standing  = true;
     }
-    
+
     updateVectors() {
         this.camera.getWorldDirection(this.forward);
         this.right.copy(this.forward).cross(this.camera.up);
@@ -71,7 +71,9 @@ class GazeViewpoint {
     }
     
     resetPose() {
-        this.vrDisplay.resetPose();
+        if(this.vrDisplay.resetPose) {
+            this.vrDisplay.resetPose();
+        }
         // Reset pose should zero out the coordinates, but this
         // does not seem to be happening in the Firefox. In this
         // case, we subtract out that offset ourselves.
@@ -132,5 +134,9 @@ class GazeViewpoint {
             this.camera.quaternion.fromArray(this.vrFrameData.pose.orientation);
             this.camera.quaternion.premultiply(this.quaternion);
         }
+    }
+
+    set eyeHeight(height) {
+        this.standingTransform.makeTranslation(0, height, 0);
     }
 }
